@@ -15,21 +15,21 @@ import webbrowser
 from BeautifulSoup import BeautifulSoup
 
 
-PORT, DOMAIN = 8000, 'http://habrahabr.ru'
-EXTRASIGN, URL_PATH  = u'\u2122', '/company/yandex/blog/258611/'
+PORT, DOMAIN = 8000, '1http://habrahabr.ru'
+EXTRA_SIGN, URL_PATH = u'\u2122', '/company/yandex/blog/258611/'
 
 
 class Proxy(SimpleHTTPServer.SimpleHTTPRequestHandler):
     def do_GET(self):
         try:
             print 'GET %s' % self.path
-            input = urllib2.urlopen(DOMAIN + self.path)
+            in_stream = urllib2.urlopen(Proxy.domain + self.path)
             print 'request processing'
-            if input.headers['Content-Type'].find('html') == -1:
-                self.copyfile(input, self.wfile)
+            if in_stream.headers['Content-Type'].find('html') == -1:
+                self.copyfile(in_stream, self.wfile)
                 return
 
-            html = input.read()
+            html = in_stream.read()
             soup = BeautifulSoup(html.decode('utf-8'))
             nav_strings = soup.body.findAll(
                 text=re.compile(r'\b[\w]{6}\b', flags=re.U))
@@ -37,12 +37,12 @@ class Proxy(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 if x.parent.name not in [u'script', u'code']:
                     x.replaceWith(
                         re.sub(r'(?P<word>\b[\w]{6})\b',
-                               lambda m: m.group('word') + EXTRASIGN, x,
+                               lambda m: m.group('word') + EXTRA_SIGN, x,
                                flags=re.U))
             self.response(soup.prettify())
         except UnicodeDecodeError, ex:
             self._error_message('got a bad html')
-        except urllib2.URLError, ex:
+        except (urllib2.URLError, ValueError), ex:
             self._error_message('error in receivinig data (%s)\n' % ex)
 
     def response(self, html):
@@ -61,7 +61,7 @@ def create_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', default=PORT)
     parser.add_argument('-d', '--domain', default=DOMAIN)
-    parser.add_argument ('-b', action='store_const', const=True, default=False)
+    parser.add_argument('-b', action='store_const', const=True, default=False)
     return parser
 
 
@@ -69,12 +69,12 @@ def main():
     parser = create_parser()
     namespace = parser.parse_args(sys.argv[1:])
     try:
-        PORT, DOMAIN = int(namespace.port), namespace.domain
-        server = SocketServer.ForkingTCPServer(('', PORT), Proxy)
+        port, Proxy.domain = int(namespace.port), namespace.domain
+        server = SocketServer.ForkingTCPServer(('', port), Proxy)
         if namespace.b:
             print 'run browser'
-            webbrowser.open('%s:%s%s' % (DOMAIN, PORT, URL_PATH))
-        print "serving at port", PORT
+            webbrowser.open('%s:%s%s' % (Proxy.domain, port, URL_PATH))
+        print "Listening on port: ", port
         server.serve_forever()
     except KeyboardInterrupt:
         server.socket.close()
