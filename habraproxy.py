@@ -1,8 +1,8 @@
 #!-*-coding:utf-8-*-
-#requirements: pip install BeautifulSoup
-#run: python2.7 habraproxy.py and paste in browser
-#http://localhost:8000/company/yandex/blog/258611/
-#param: -p: port, -d: domain, -b: browser
+# requirements: pip install BeautifulSoup
+# run: python2.7 habraproxy.py and paste in browser
+# http://localhost:8000/company/yandex/blog/258611/
+# param: -p: port, -d: domain, -b: browser
 
 import argparse
 import re
@@ -15,11 +15,13 @@ import webbrowser
 from BeautifulSoup import BeautifulSoup
 
 
-PORT, DOMAIN = 8000, '1http://habrahabr.ru'
+PORT, DOMAIN = 8000, 'http://habrahabr.ru'
 EXTRA_SIGN, URL_PATH = u'\u2122', '/company/yandex/blog/258611/'
 
 
 class Proxy(SimpleHTTPServer.SimpleHTTPRequestHandler):
+    domain = DOMAIN
+
     def do_GET(self):
         try:
             print 'GET %s' % self.path
@@ -40,7 +42,7 @@ class Proxy(SimpleHTTPServer.SimpleHTTPRequestHandler):
                                lambda m: m.group('word') + EXTRA_SIGN, x,
                                flags=re.U))
             self.response(soup.prettify())
-        except UnicodeDecodeError, ex:
+        except UnicodeDecodeError:
             self._error_message('got a bad html')
         except (urllib2.URLError, ValueError), ex:
             self._error_message('error in receivinig data (%s)\n' % ex)
@@ -68,6 +70,7 @@ def create_parser():
 def main():
     parser = create_parser()
     namespace = parser.parse_args(sys.argv[1:])
+    server = None
     try:
         port, Proxy.domain = int(namespace.port), namespace.domain
         server = SocketServer.ForkingTCPServer(('', port), Proxy)
@@ -77,7 +80,8 @@ def main():
         print "Listening on port: ", port
         server.serve_forever()
     except KeyboardInterrupt:
-        server.socket.close()
+        if server:
+            server.socket.close()
     except ValueError:
         print 'Incorrect PORT'
 
