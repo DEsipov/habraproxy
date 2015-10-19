@@ -1,18 +1,18 @@
 #!-*-coding:utf-8-*-
-# requirements: pip install BeautifulSoup
-# run: python2.7 habraproxy.py and paste in browser
-# http://localhost:8000/company/yandex/blog/258611/
+# requirements: beautifulsoup4, requests
+# python habraproxy.py [-p PORT] [-d DOMAIN] [-b]
 # param: -p: port, -d: domain, -b: browser
+
 
 import argparse
 import re
-import tempfile
 import sys
 import SocketServer
 import SimpleHTTPServer
-import urllib2
 import webbrowser
-from BeautifulSoup import BeautifulSoup
+
+from bs4 import BeautifulSoup, Comment
+import requests
 
 
 PORT, DOMAIN = 8000, 'http://habrahabr.ru'
@@ -24,35 +24,46 @@ class Proxy(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            print 'GET %s' % self.path
-            in_stream = urllib2.urlopen(Proxy.domain + self.path)
+            url = Proxy.domain + self.path
+            print 'GET %s' % url
+            page = requests.get(url)
             print 'request processing'
-            if in_stream.headers['Content-Type'].find('html') == -1:
-                self.copyfile(in_stream, self.wfile)
+            if page.headers['Content-Type'].find('html') == -1:
+                self.response(page.content)
                 return
 
-            html = in_stream.read()
-            soup = BeautifulSoup(html.decode('utf-8'))
+            soup = BeautifulSoup(page.content, 'html.parser')
             nav_strings = soup.body.findAll(
                 text=re.compile(r'\b[\w]{6}\b', flags=re.U))
-            for x in nav_strings:
-                if x.parent.name not in [u'script', u'code']:
-                    x.replaceWith(
-                        re.sub(r'(?P<word>\b[\w]{6})\b',
-                               lambda m: m.group('word') + EXTRA_SIGN, x,
-                               flags=re.U))
-            self.response(soup.prettify())
-        except UnicodeDecodeError:
-            self._error_message('got a bad html')
-        except (urllib2.URLError, ValueError), ex:
-            self._error_message('error in receivinig data (%s)\n' % ex)
+            for nav_string in nav_strings:
+                # delete comment in html
+                if isinstance(nav_string, Comment):
+                    nav_string.extract()
+                    continue
+
+                # don not handle tags: <script> and <code>
+                flag = False
+                for parent in nav_string.parentGenerator():
+                    try:
+                        if parent.name in [u'script', u'code']:
+                            flag = True
+                            break
+                    except AttributeError:
+                        break  # reached the top
+                if flag:
+                    continue
+
+                nav_string.replaceWith(
+                    re.sub(r'(?P<word>\b[\w]{6})\b',
+                           lambda m: m.group('word') + EXTRA_SIGN, nav_string,
+                           flags=re.U))
+            self.response(str(soup))
+        except requests.ConnectionError, ex:
+            self._error_message('error in receiving data (%s)\n' % ex)
 
     def response(self, html):
         print 'send response on %s' % self.path
-        with tempfile.TemporaryFile() as f:
-                f.write(html)
-                f.seek(0)
-                self.copyfile(f, self.wfile)
+        self.wfile.write(html)
 
     def _error_message(self, msg):
         print '%(div)s\n%(msg)s\n%(div)s' % dict(div='*' * 10, msg=msg)
