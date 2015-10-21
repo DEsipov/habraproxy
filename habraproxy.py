@@ -33,6 +33,12 @@ class Proxy(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 return
 
             soup = BeautifulSoup(page.content, 'html.parser')
+            # replace href of tag 'a'
+            links = soup.findAll(href=lambda value: value and DOMAIN in value)
+            for a in links:
+                a['href'] = a['href'].replace(DOMAIN,
+                                              'http://localhost:%s' % PORT)
+
             nav_strings = soup.body.findAll(
                 text=re.compile(r'\b[\w]{6}\b', flags=re.U))
             for nav_string in nav_strings:
